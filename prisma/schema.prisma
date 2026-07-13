@@ -3,8 +3,914 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-// Add models here based on design document
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserRole {
+  ADMIN
+  RESEARCH_DIRECTOR
+  DEAN_RESEARCH
+  SPONSORED_RESEARCH_TEAM
+  INNOVATION_CELL
+  PATENT_CELL
+  DOCTORAL_OFFICE
+  FACULTY
+  PHD_SCHOLAR
+  INDUSTRY_PARTNER
+  EXECUTIVE
+}
+
+enum ProjectStatus {
+  IDEA
+  CONCEPT_NOTE
+  INTERNAL_REVIEW
+  BUDGET_REVIEW
+  TECHNICAL_REVIEW
+  SUBMITTED
+  UNDER_REVISION
+  AWARDED
+  IN_EXECUTION
+  COMPLETED
+  CLOSED
+}
+
+enum PatentStatus {
+  IDEA
+  NOVELTY_CHECK
+  DISCLOSURE
+  DRAFT
+  FILED
+  PUBLISHED
+  UNDER_EXAMINATION
+  GRANTED
+  COMMERCIALIZED
+}
+
+enum PhDRiskStatus {
+  ON_TRACK
+  NEEDS_ATTENTION
+  CRITICAL
+}
+
+enum NotificationType {
+  DEADLINE_REMINDER
+  IDC_REMINDER
+  PROPOSAL_REMINDER
+  PUBLICATION_REMINDER
+  PATENT_REMINDER
+  MILESTONE_ALERT
+  SYSTEM_NOTIFICATION
+}
+
+// ============================================================
+// USER & AUTH
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String?
+  emailVerified DateTime?
+  image         String?
+  role          UserRole  @default(FACULTY)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  faculty          Faculty?
+  phdScholar       PhDScholar?
+  accounts         Account[]
+  sessions         Session[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================
+// FACULTY
+// ============================================================
+
+model Faculty {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  employeeId        String   @unique
+  department        String
+  school            String
+  designation       String
+  joiningDate       DateTime
+  googleScholarId   String?
+  scopusId          String?
+  orcid             String?
+  webOfScienceId    String?
+  hIndex            Int      @default(0)
+  totalCitations    Int      @default(0)
+  profileCompletion Int      @default(0)
+  researchScore     Float    @default(0)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user                  User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expertise             FacultyExpertise[]
+  publications          FacultyPublication[]
+  awards                FacultyAward[]
+  skills                FacultySkill[]
+  software              FacultySoftware[]
+  projects              ProjectCollaborator[]
+  consultancies         ConsultancyProject[]
+  patents               PatentInventor[]
+  clusterMemberships    ClusterMember[]
+  phdScholars           PhDScholar[]          @relation("Supervisor")
+  coSupervisedScholars  PhDScholar[]          @relation("CoSupervisor")
+
+  @@index([employeeId])
+  @@index([department])
+  @@index([school])
+  @@index([researchScore(sort: Desc)])
+  @@map("faculty")
+}
+
+model FacultyExpertise {
+  id        String   @id @default(cuid())
+  facultyId String
+  area      String
+  keywords  String[]
+  isPrimary Boolean  @default(false)
+
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@map("faculty_expertise")
+}
+
+model FacultyPublication {
+  id           String   @id @default(cuid())
+  facultyId    String
+  title        String
+  authors      String[]
+  journal      String?
+  conference   String?
+  year         Int
+  doi          String?
+  citations    Int      @default(0)
+  quartile     String?
+  impactFactor Float?
+  type         String
+
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@index([year(sort: Desc)])
+  @@index([quartile])
+  @@map("faculty_publications")
+}
+
+model FacultyAward {
+  id          String   @id @default(cuid())
+  facultyId   String
+  title       String
+  awardedBy   String
+  year        Int
+  description String?
+
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@map("faculty_awards")
+}
+
+model FacultySkill {
+  id        String @id @default(cuid())
+  facultyId String
+  skill     String
+  level     String
+
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@map("faculty_skills")
+}
+
+model FacultySoftware {
+  id        String @id @default(cuid())
+  facultyId String
+  software  String
+  expertise String
+
+  faculty Faculty @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@index([facultyId])
+  @@map("faculty_software")
+}
+
+// ============================================================
+// RESEARCH CLUSTERS
+// ============================================================
+
+model ResearchCluster {
+  id               String   @id @default(cuid())
+  name             String
+  description      String?
+  keywords         String[]
+  clusterScore     Float    @default(0)
+  publicationCount Int      @default(0)
+  citationCount    Int      @default(0)
+  fundingAmount    Float    @default(0)
+  patentCount      Int      @default(0)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  members     ClusterMember[]
+  clusterKeywords ClusterKeyword[]
+
+  @@index([name])
+  @@map("research_clusters")
+}
+
+model ClusterMember {
+  id        String           @id @default(cuid())
+  clusterId String
+  facultyId String
+  role      String           @default("MEMBER")
+  joinedAt  DateTime         @default(now())
+
+  cluster ResearchCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  faculty Faculty         @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, facultyId])
+  @@index([clusterId])
+  @@index([facultyId])
+  @@map("cluster_members")
+}
+
+model ClusterKeyword {
+  id        String @id @default(cuid())
+  clusterId String
+  keyword   String
+  weight    Float  @default(1.0)
+
+  researchCluster ResearchCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@map("cluster_keywords")
+}
+
+// ============================================================
+// SPONSORED RESEARCH
+// ============================================================
+
+model FundingAgency {
+  id           String @id @default(cuid())
+  name         String @unique
+  type         String
+  country      String
+  website      String?
+  contactEmail String?
+
+  projects ResearchProject[]
+
+  @@map("funding_agencies")
+}
+
+model ResearchProject {
+  id              String        @id @default(cuid())
+  title           String
+  description     String?
+  fundingAgencyId String
+  piId            String
+  status          ProjectStatus @default(IDEA)
+  amountRequested Float
+  amountAwarded   Float?
+  startDate       DateTime?
+  endDate         DateTime?
+  submissionDate  DateTime?
+  awardDate       DateTime?
+  theme           String?
+  eligibility     String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  fundingAgency FundingAgency      @relation(fields: [fundingAgencyId], references: [id])
+  collaborators ProjectCollaborator[]
+  documents     ProjectDocument[]
+  reviews       ProjectReview[]
+  milestones    ProjectMilestone[]
+
+  @@index([status])
+  @@index([piId])
+  @@index([fundingAgencyId])
+  @@map("research_projects")
+}
+
+model ProjectCollaborator {
+  id        String   @id @default(cuid())
+  projectId String
+  facultyId String
+  role      String
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  faculty Faculty         @relation(fields: [facultyId], references: [id])
+
+  @@unique([projectId, facultyId])
+  @@index([projectId])
+  @@index([facultyId])
+  @@map("project_collaborators")
+}
+
+model ProjectDocument {
+  id         String   @id @default(cuid())
+  projectId  String
+  title      String
+  type       String
+  fileUrl    String
+  uploadedAt DateTime @default(now())
+  uploadedBy String
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_documents")
+}
+
+model ProjectReview {
+  id         String   @id @default(cuid())
+  projectId  String
+  reviewType String
+  reviewerId String
+  comments   String?
+  status     String
+  reviewedAt DateTime @default(now())
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("project_reviews")
+}
+
+model ProjectMilestone {
+  id          String    @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  dueDate     DateTime
+  completedAt DateTime?
+  status      String    @default("PENDING")
+
+  project ResearchProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+  @@map("project_milestones")
+}
+
+// ============================================================
+// CONSULTANCY
+// ============================================================
+
+model IndustryPartner {
+  id            String @id @default(cuid())
+  name          String
+  industry      String
+  country       String
+  website       String?
+  contactPerson String?
+  contactEmail  String?
+  contactPhone  String?
+
+  consultancies ConsultancyProject[]
+
+  @@map("industry_partners")
+}
+
+model ConsultancyProject {
+  id               String   @id @default(cuid())
+  title            String
+  description      String?
+  industryPartnerId String
+  facultyId        String
+  quotationAmount  Float
+  agreedAmount     Float?
+  startDate        DateTime
+  endDate          DateTime?
+  status           String   @default("INITIATED")
+  mouUrl           String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  industryPartner IndustryPartner  @relation(fields: [industryPartnerId], references: [id])
+  faculty         Faculty          @relation(fields: [facultyId], references: [id])
+  deliverables    Deliverable[]
+  invoices        Invoice[]
+  feedback        ClientFeedback?
+
+  @@index([facultyId])
+  @@index([industryPartnerId])
+  @@map("consultancy_projects")
+}
+
+model Deliverable {
+  id          String    @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  dueDate     DateTime
+  completedAt DateTime?
+  status      String    @default("PENDING")
+
+  project ConsultancyProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("deliverables")
+}
+
+model Invoice {
+  id            String   @id @default(cuid())
+  projectId     String
+  invoiceNumber String   @unique
+  amount        Float
+  issuedDate    DateTime
+  paidDate      DateTime?
+  status        String   @default("PENDING")
+
+  project ConsultancyProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@map("invoices")
+}
+
+model ClientFeedback {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  rating      Int
+  comments    String?
+  submittedAt DateTime @default(now())
+
+  project ConsultancyProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("client_feedback")
+}
+
+// ============================================================
+// PATENTS
+// ============================================================
+
+model Patent {
+  id               String       @id @default(cuid())
+  title            String
+  abstract         String
+  status           PatentStatus @default(IDEA)
+  filingDate       DateTime?
+  publicationDate  DateTime?
+  grantDate        DateTime?
+  patentNumber     String?      @unique
+  jurisdiction     String?
+  trl              Int?
+  category         String?
+  applicationNumber String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  inventors     PatentInventor[]
+  stages        PatentStage[]
+  licenses      PatentLicense[]
+  noveltyChecks NoveltyCheck[]
+
+  @@index([status])
+  @@index([filingDate(sort: Desc)])
+  @@map("patents")
+}
+
+model PatentInventor {
+  id        String  @id @default(cuid())
+  patentId  String
+  facultyId String
+  role      String  @default("INVENTOR")
+  order     Int
+
+  patent  Patent  @relation(fields: [patentId], references: [id], onDelete: Cascade)
+  faculty Faculty @relation(fields: [facultyId], references: [id])
+
+  @@unique([patentId, facultyId])
+  @@index([patentId])
+  @@index([facultyId])
+  @@map("patent_inventors")
+}
+
+model PatentStage {
+  id          String   @id @default(cuid())
+  patentId    String
+  stage       String
+  enteredAt   DateTime @default(now())
+  notes       String?
+  documentUrl String?
+
+  patent Patent @relation(fields: [patentId], references: [id], onDelete: Cascade)
+
+  @@index([patentId])
+  @@map("patent_stages")
+}
+
+model PatentLicense {
+  id        String    @id @default(cuid())
+  patentId  String
+  licensee  String
+  startDate DateTime
+  endDate   DateTime?
+  revenue   Float
+  terms     String?
+
+  patent Patent @relation(fields: [patentId], references: [id], onDelete: Cascade)
+
+  @@index([patentId])
+  @@map("patent_licenses")
+}
+
+model NoveltyCheck {
+  id         String   @id @default(cuid())
+  patentId   String
+  checkedBy  String
+  checkedAt  DateTime @default(now())
+  result     String
+  references String[]
+  notes      String?
+
+  patent Patent @relation(fields: [patentId], references: [id], onDelete: Cascade)
+
+  @@index([patentId])
+  @@map("novelty_checks")
+}
+
+// ============================================================
+// REVA NEST (INNOVATION)
+// ============================================================
+
+model Startup {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  founderId       String?
+  founderType     String?
+  mentorId        String?
+  incubationStage String   @default("IDEATION")
+  trl             Int?
+  fundingRaised   Float    @default(0)
+  website         String?
+  productStatus   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  prototypes Prototype[]
+  investors  StartupInvestor[]
+  demoDays   StartupDemoDay[]
+
+  @@map("startups")
+}
+
+model Prototype {
+  id          String   @id @default(cuid())
+  startupId   String
+  name        String
+  description String?
+  version     String
+  status      String   @default("DEVELOPMENT")
+  createdAt   DateTime @default(now())
+
+  startup Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@map("prototypes")
+}
+
+model StartupInvestor {
+  id         String   @id @default(cuid())
+  startupId  String
+  name       String
+  type       String
+  amount     Float
+  investedAt DateTime
+
+  startup Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@map("startup_investors")
+}
+
+model StartupDemoDay {
+  id        String   @id @default(cuid())
+  startupId String
+  eventName String
+  eventDate DateTime
+  outcome   String?
+  notes     String?
+
+  startup Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+
+  @@index([startupId])
+  @@map("startup_demo_days")
+}
+
+// ============================================================
+// PHD MANAGEMENT
+// ============================================================
+
+model PhDScholar {
+  id                 String        @id @default(cuid())
+  userId             String        @unique
+  enrollmentNumber   String        @unique
+  registrationDate   DateTime
+  expectedCompletion DateTime
+  department         String
+  school             String
+  researchArea       String
+  supervisorId       String
+  coSupervisorId     String?
+  riskStatus         PhDRiskStatus @default(ON_TRACK)
+  progressPercent    Int           @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supervisor   Faculty  @relation("Supervisor", fields: [supervisorId], references: [id])
+  coSupervisor Faculty? @relation("CoSupervisor", fields: [coSupervisorId], references: [id])
+
+  milestones    PhDMilestone[]
+  idcMeetings   IDCMeeting[]
+  publications  ScholarPublication[]
+
+  @@index([supervisorId])
+  @@index([riskStatus])
+  @@index([department])
+  @@map("phd_scholars")
+}
+
+model PhDMilestone {
+  id          String    @id @default(cuid())
+  scholarId   String
+  title       String
+  description String?
+  dueDate     DateTime
+  completedAt DateTime?
+  status      String    @default("PENDING")
+  type        String
+
+  scholar PhDScholar @relation(fields: [scholarId], references: [id], onDelete: Cascade)
+
+  @@index([scholarId])
+  @@index([status])
+  @@map("phd_milestones")
+}
+
+model IDCMeeting {
+  id          String   @id @default(cuid())
+  scholarId   String
+  scheduledAt DateTime
+  completedAt DateTime?
+  attendees   String[]
+  agenda      String?
+  minutes     String?
+  decisions   String?
+  status      String   @default("SCHEDULED")
+
+  scholar PhDScholar @relation(fields: [scholarId], references: [id], onDelete: Cascade)
+
+  @@index([scholarId])
+  @@index([scheduledAt])
+  @@map("idc_meetings")
+}
+
+model ScholarPublication {
+  id        String   @id @default(cuid())
+  scholarId String
+  title     String
+  authors   String[]
+  venue     String
+  year      Int
+  doi       String?
+  type      String
+
+  scholar PhDScholar @relation(fields: [scholarId], references: [id], onDelete: Cascade)
+
+  @@index([scholarId])
+  @@map("scholar_publications")
+}
+
+// ============================================================
+// STUDENT RESEARCH
+// ============================================================
+
+model StudentProject {
+  id          String   @id @default(cuid())
+  studentName String
+  program     String
+  year        Int
+  title       String
+  guideId     String
+  coGuideId   String?
+  startDate   DateTime
+  endDate     DateTime?
+  status      String   @default("ONGOING")
+  type        String
+
+  @@index([guideId])
+  @@index([year])
+  @@map("student_projects")
+}
+
+model Hackathon {
+  id           String   @id @default(cuid())
+  name         String
+  organizer    String
+  date         DateTime
+  participants String[]
+  outcome      String?
+  prize        String?
+
+  @@index([date])
+  @@map("hackathons")
+}
+
+model ResearchInternship {
+  id          String   @id @default(cuid())
+  studentName String
+  program     String
+  company     String
+  guideId     String?
+  startDate   DateTime
+  endDate     DateTime?
+  outcome     String?
+
+  @@index([guideId])
+  @@map("research_internships")
+}
+
+model InnovationChallenge {
+  id           String   @id @default(cuid())
+  name         String
+  organizer    String
+  date         DateTime
+  participants String[]
+  outcome      String?
+  prize        String?
+
+  @@map("innovation_challenges")
+}
+
+// ============================================================
+// NOTIFICATIONS
+// ============================================================
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id              String  @id @default(cuid())
+  userId          String  @unique
+  emailEnabled    Boolean @default(true)
+  inAppEnabled    Boolean @default(true)
+  deadlineDays    Int     @default(7)
+  idcReminder     Boolean @default(true)
+  patentReminder  Boolean @default(true)
+  projectReminder Boolean @default(true)
+
+  @@map("notification_preferences")
+}
+
+// ============================================================
+// KPI METRICS
+// ============================================================
+
+model KPIMetric {
+  id         String   @id @default(cuid())
+  entityType String
+  entityId   String
+  metricType String
+  value      Float
+  period     String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([metricType])
+  @@index([period])
+  @@map("kpi_metrics")
+}
+
+model TargetVsAchievement {
+  id          String  @id @default(cuid())
+  entityType  String
+  entityId    String
+  metricType  String
+  target      Float
+  achievement Float
+  period      String
+  updatedAt   DateTime @updatedAt
+
+  @@unique([entityType, entityId, metricType, period])
+  @@map("target_vs_achievement")
+}
+
+// ============================================================
+// DOCUMENTS & FILE STORAGE
+// ============================================================
+
+model Document {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String
+  title       String
+  type        String
+  fileUrl     String
+  fileSize    Int?
+  mimeType    String?
+  uploadedBy  String
+  uploadedAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("documents")
+}
+
+// ============================================================
+// AUDIT LOG
+// ============================================================
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  action    String
+  entity    String
+  entityId  String
+  changes   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
