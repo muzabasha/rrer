@@ -1,1 +1,3 @@
-export { authConfig } from "./auth.config"
+import { handlers, auth, signIn, signOut } from "./auth"
+
+export { handlers, auth, signIn, signOut }
