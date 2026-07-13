@@ -5,6 +5,6 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: "default" | "sm" | "lg"
 }
 
-export function Button({ className, variant = "default", size = "default", ...props }: ButtonProps) {
+export function Button({ className, variant: _variant, size: _size, ...props }: ButtonProps) {
   return <button className={cn("inline-flex items-center justify-center rounded-md", className)} {...props} />
 }

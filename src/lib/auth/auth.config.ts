@@ -1,24 +1,11 @@
-import type { NextAuthConfig } from "next-auth"
-import Google from "next-auth/providers/google"
-import Credentials from "next-auth/providers/credentials"
+export interface AuthConfig {
+  providers: string[]
+  pages: Record<string, string>
+  session: Record<string, unknown>
+}
 
-export const authConfig: NextAuthConfig = {
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-    Credentials({
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        // Implement authorization logic
-        return null
-      },
-    }),
-  ],
+export const authConfig: AuthConfig = {
+  providers: ["google", "credentials"],
   pages: {
     signIn: "/login",
     error: "/auth/error",
