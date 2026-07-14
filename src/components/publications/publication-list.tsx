@@ -31,7 +31,7 @@ const quartileColors: Record<string, string> = {
   Q4: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100",
 }
 
-export function PublicationList({ facultyId, refreshKey, onRefresh }: PublicationListProps) {
+export function PublicationList({ facultyId, refreshKey: _refreshKey, onRefresh }: PublicationListProps) {
   const [data, setData] = useState<PublicationListResult | null>(null)
   const [search, setSearch] = useState("")
   const [type, setType] = useState("")
